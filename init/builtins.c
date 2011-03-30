@@ -356,6 +356,16 @@ int do_mount(int nargs, char **args)
         close(fd);
         ERROR("out of loopback devices");
         return -1;
+    } else if (!strncmp(source, "mmc@blk", 7)) {
+        sprintf(tmp, "/dev/block/mmcblk%s", source + 7);
+
+        if (wait)
+            wait_for_file(tmp, COMMAND_RETRY_TIMEOUT);
+        if (mount(tmp, target, system, flags, options) < 0) {
+            return -1;
+        }
+
+        return 0;
     } else {
         if (wait)
             wait_for_file(source, COMMAND_RETRY_TIMEOUT);
