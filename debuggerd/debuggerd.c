@@ -15,6 +15,8 @@
 ** limitations under the License.
 */
 
+#include <stddef.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -42,8 +44,6 @@
 
 #include <libunwind-ptrace.h>
 
-#include "utility.h"
-
 #ifdef WITH_VFP
 #ifdef WITH_VFP_D32
 #define NUM_VFP_REGS 32
@@ -51,12 +51,6 @@
 #define NUM_VFP_REGS 16
 #endif
 #endif
-
-/* Main entry point to get the backtrace from the crashing process */
-extern int unwind_backtrace_with_ptrace(int tfd, pid_t pid, mapinfo *map,
-                                        unsigned int sp_list[],
-                                        int *frame0_pc_sane,
-                                        bool at_fault);
 
 static int logsocket = -1;
 
@@ -88,36 +82,6 @@ void _LOG(int tfd, bool in_tombstone_only, const char *fmt, ...)
 #define XLOG(fmt...) do {} while(0)
 #endif
 
-// 6f000000-6f01e000 rwxp 00000000 00:0c 16389419   /system/lib/libcomposer.so
-// 012345678901234567890123456789012345678901234567890123456789
-// 0         1         2         3         4         5
-
-mapinfo *parse_maps_line(char *line)
-{
-    mapinfo *mi;
-    int len = strlen(line);
-
-    if(len < 1) return 0;
-    line[--len] = 0;
-
-    if(len < 50) return 0;
-    if(line[20] != 'x') return 0;
-
-    mi = malloc(sizeof(mapinfo) + (len - 47));
-    if(mi == 0) return 0;
-
-    mi->start = strtoul(line, 0, 16);
-    mi->end = strtoul(line + 9, 0, 16);
-    /* To be filled in parse_exidx_info if the mapped section starts with
-     * elf_header
-     */
-    mi->exidx_start = mi->exidx_end = 0;
-    mi->next = 0;
-    strcpy(mi->name, line + 49);
-
-    return mi;
-}
-
 void dump_build_info(int tfd)
 {
     char fingerprint[PROPERTY_VALUE_MAX];
@@ -125,146 +89,6 @@ void dump_build_info(int tfd)
     property_get("ro.build.fingerprint", fingerprint, "unknown");
 
     _LOG(tfd, false, "Build fingerprint: '%s'\n", fingerprint);
-}
-
-
-void dump_stack_and_code(int tfd, int pid, mapinfo *map,
-                         int unwind_depth, unsigned int sp_list[],
-                         bool at_fault)
-{
-    unsigned int sp, pc, p, end, data;
-    struct pt_regs r;
-    int sp_depth;
-    bool only_in_tombstone = !at_fault;
-    char code_buffer[80];
-
-    if(ptrace(PTRACE_GETREGS, pid, 0, &r)) return;
-    sp = r.ARM_sp;
-    pc = r.ARM_pc;
-
-    _LOG(tfd, only_in_tombstone, "\ncode around pc:\n");
-
-    end = p = pc & ~3;
-    p -= 32;
-    end += 32;
-
-    /* Dump the code around PC as:
-     *  addr       contents
-     *  00008d34   fffffcd0 4c0eb530 b0934a0e 1c05447c
-     *  00008d44   f7ff18a0 490ced94 68035860 d0012b00
-     */
-    while (p <= end) {
-        int i;
-
-        sprintf(code_buffer, "%08x ", p);
-        for (i = 0; i < 4; i++) {
-            data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
-            sprintf(code_buffer + strlen(code_buffer), "%08x ", data);
-            p += 4;
-        }
-        _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
-    }
-
-    if ((unsigned) r.ARM_lr != pc) {
-        _LOG(tfd, only_in_tombstone, "\ncode around lr:\n");
-
-        end = p = r.ARM_lr & ~3;
-        p -= 32;
-        end += 32;
-
-        /* Dump the code around LR as:
-         *  addr       contents
-         *  00008d34   fffffcd0 4c0eb530 b0934a0e 1c05447c
-         *  00008d44   f7ff18a0 490ced94 68035860 d0012b00
-         */
-        while (p <= end) {
-            int i;
-
-            sprintf(code_buffer, "%08x ", p);
-            for (i = 0; i < 4; i++) {
-                data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
-                sprintf(code_buffer + strlen(code_buffer), "%08x ", data);
-                p += 4;
-            }
-            _LOG(tfd, only_in_tombstone, "%s\n", code_buffer);
-        }
-    }
-
-    p = sp - 64;
-    p &= ~3;
-    if (unwind_depth != 0) {
-        if (unwind_depth < STACK_CONTENT_DEPTH) {
-            end = sp_list[unwind_depth-1];
-        }
-        else {
-            end = sp_list[STACK_CONTENT_DEPTH-1];
-        }
-    }
-    else {
-        end = sp | 0x000000ff;
-        end += 0xff;
-    }
-
-    _LOG(tfd, only_in_tombstone, "\nstack:\n");
-
-    /* If the crash is due to PC == 0, there will be two frames that
-     * have identical SP value.
-     */
-    if (sp_list[0] == sp_list[1]) {
-        sp_depth = 1;
-    }
-    else {
-        sp_depth = 0;
-    }
-
-    while (p <= end) {
-         char *prompt;
-         char level[16];
-         data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
-         if (p == sp_list[sp_depth]) {
-             sprintf(level, "#%02d", sp_depth++);
-             prompt = level;
-         }
-         else {
-             prompt = "   ";
-         }
-
-         /* Print the stack content in the log for the first 3 frames. For the
-          * rest only print them in the tombstone file.
-          */
-         _LOG(tfd, (sp_depth > 2) || only_in_tombstone,
-              "%s %08x  %08x  %s\n", prompt, p, data,
-              map_to_name(map, data, ""));
-         p += 4;
-    }
-    /* print another 64-byte of stack data after the last frame */
-
-    end = p+64;
-    while (p <= end) {
-         data = ptrace(PTRACE_PEEKTEXT, pid, (void*)p, NULL);
-         _LOG(tfd, (sp_depth > 2) || only_in_tombstone,
-              "    %08x  %08x  %s\n", p, data,
-              map_to_name(map, data, ""));
-         p += 4;
-    }
-}
-
-void dump_pc_and_lr(int tfd, int pid, mapinfo *map, int unwound_level,
-                    bool at_fault)
-{
-    struct pt_regs r;
-
-    if(ptrace(PTRACE_GETREGS, pid, 0, &r)) {
-        _LOG(tfd, !at_fault, "tid %d not responding!\n", pid);
-        return;
-    }
-
-    if (unwound_level == 0) {
-        _LOG(tfd, !at_fault, "         #%02d  pc %08x  %s\n", 0, r.ARM_pc,
-             map_to_name(map, r.ARM_pc, "<unknown>"));
-    }
-    _LOG(tfd, !at_fault, "         #%02d  lr %08x  %s\n", 1, r.ARM_lr,
-            map_to_name(map, r.ARM_lr, "<unknown>"));
 }
 
 void dump_registers(int tfd, int pid, bool at_fault)
@@ -399,40 +223,6 @@ void dump_crash_banner(int tfd, unsigned pid, unsigned tid, int sig)
          pid, tid, x ? x : "UNKNOWN");
 
     if(sig) dump_fault_addr(tfd, tid, sig);
-}
-
-static void parse_exidx_info(mapinfo *milist, pid_t pid)
-{
-    mapinfo *mi;
-    for (mi = milist; mi != NULL; mi = mi->next) {
-        Elf32_Ehdr ehdr;
-
-        memset(&ehdr, 0, sizeof(Elf32_Ehdr));
-        /* Read in sizeof(Elf32_Ehdr) worth of data from the beginning of
-         * mapped section.
-         */
-        get_remote_struct(pid, (void *) (mi->start), &ehdr,
-                          sizeof(Elf32_Ehdr));
-        /* Check if it has the matching magic words */
-        if (IS_ELF(ehdr)) {
-            Elf32_Phdr phdr;
-            Elf32_Phdr *ptr;
-            int i;
-
-            ptr = (Elf32_Phdr *) (mi->start + ehdr.e_phoff);
-            for (i = 0; i < ehdr.e_phnum; i++) {
-                /* Parse the program header */
-                get_remote_struct(pid, (char *) (ptr+i), &phdr,
-                                  sizeof(Elf32_Phdr));
-                /* Found a EXIDX segment? */
-                if (phdr.p_type == PT_ARM_EXIDX) {
-                    mi->exidx_start = mi->start + phdr.p_offset;
-                    mi->exidx_end = mi->exidx_start + phdr.p_filesz;
-                    break;
-                }
-            }
-        }
-    }
 }
 
 void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
