@@ -40,6 +40,8 @@
 
 #include <private/android_filesystem_config.h>
 
+#include <libunwind-ptrace.h>
+
 #include "utility.h"
 
 #ifdef WITH_VFP
@@ -435,59 +437,39 @@ static void parse_exidx_info(mapinfo *milist, pid_t pid)
 
 void dump_crash_report(int tfd, unsigned pid, unsigned tid, bool at_fault)
 {
-    char data[1024];
-    FILE *fp;
-    mapinfo *milist = 0;
-    unsigned int sp_list[STACK_CONTENT_DEPTH];
-    int stack_depth;
-    int frame0_pc_sane = 1;
-
-    if (!at_fault) {
-        _LOG(tfd, true,
-         "--- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---\n");
-        _LOG(tfd, true, "pid: %d, tid: %d\n", pid, tid);
-    }
+    unw_addr_space_t as;
+    struct UPT_info *ui;
+    unw_cursor_t cursor;
+    int ret;
+    bool only_in_tombstone = !at_fault;
 
     dump_registers(tfd, tid, at_fault);
 
-    /* Clear stack pointer records */
-    memset(sp_list, 0, sizeof(sp_list));
+    as = unw_create_addr_space (&_UPT_accessors, 0);
+    ui = _UPT_create (pid);
 
-    sprintf(data, "/proc/%d/maps", pid);
-    fp = fopen(data, "r");
-    if(fp) {
-        while(fgets(data, 1024, fp)) {
-            mapinfo *mi = parse_maps_line(data);
-            if(mi) {
-                mi->next = milist;
-                milist = mi;
-            }
-        }
-        fclose(fp);
+    if (unw_init_remote (&cursor, as, ui) < 0) {
+        _LOG(tfd, false, "unw_init_remote failed\n");
+        return;
     }
 
-    parse_exidx_info(milist, tid);
+    _LOG(tfd, only_in_tombstone,
+         "backtrace of the remote process (pid %d) using libunwind-ptrace:\n",
+         pid);
 
-    /* If stack unwinder fails, use the default solution to dump the stack
-     * content.
-     */
-    stack_depth = unwind_backtrace_with_ptrace(tfd, tid, milist, sp_list,
-                                               &frame0_pc_sane, at_fault);
+    do {
+        unw_word_t ip, sp, offp;
+        char buf[512];
 
-    /* The stack unwinder should at least unwind two levels of stack. If less
-     * level is seen we make sure at lease pc and lr are dumped.
-     */
-    if (stack_depth < 2) {
-        dump_pc_and_lr(tfd, tid, milist, stack_depth, at_fault);
-    }
+        unw_get_reg (&cursor, UNW_REG_IP, &ip);
+        unw_get_reg (&cursor, UNW_REG_SP, &sp);
+        unw_get_proc_name (&cursor, buf, sizeof (buf), &offp);
+        printf ("  ip: %10p, sp: %10p   %s\n", (void*) ip, (void*) sp, buf);
+        _LOG(tfd, only_in_tombstone, "  ip: %10p, sp: %10p   %s\n",
+             (void*) ip, (void*) sp, buf);
+    } while ((ret = unw_step (&cursor)) > 0);
 
-    dump_stack_and_code(tfd, tid, milist, stack_depth, sp_list, at_fault);
-
-    while(milist) {
-        mapinfo *next = milist->next;
-        free(milist);
-        milist = next;
-    }
+    _UPT_destroy (ui);
 }
 
 #define MAX_TOMBSTONES	10
