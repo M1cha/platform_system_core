@@ -5,6 +5,8 @@ ifeq ($(TARGET_ARCH),arm)
 LOCAL_PATH:= $(call my-dir)
 include $(CLEAR_VARS)
 
+LOCAL_C_INCLUDES += external/libunwind/include
+
 LOCAL_SRC_FILES:= debuggerd.c getevent.c unwind-arm.c pr-support.c utility.c
 LOCAL_CFLAGS := -Wall
 LOCAL_MODULE := debuggerd
@@ -16,7 +18,7 @@ ifeq ($(ARCH_ARM_HAVE_VFP_D32),true)
 LOCAL_CFLAGS += -DWITH_VFP_D32
 endif # ARCH_ARM_HAVE_VFP_D32
 
-LOCAL_STATIC_LIBRARIES := libcutils libc
+LOCAL_STATIC_LIBRARIES := libcutils libc libunwind
 
 include $(BUILD_EXECUTABLE)
 
