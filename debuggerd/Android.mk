@@ -7,7 +7,7 @@ include $(CLEAR_VARS)
 
 LOCAL_C_INCLUDES += external/libunwind/include
 
-LOCAL_SRC_FILES:= debuggerd.c getevent.c unwind-arm.c pr-support.c utility.c
+LOCAL_SRC_FILES:= debuggerd.c getevent.c
 LOCAL_CFLAGS := -Wall
 LOCAL_MODULE := debuggerd
 
