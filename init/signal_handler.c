@@ -39,7 +39,7 @@ static void sigchld_handler(int s)
 }
 
 #define CRITICAL_CRASH_THRESHOLD    4       /* if we crash >4 times ... */
-#define CRITICAL_CRASH_WINDOW       (4*60)  /* ... in 4 minutes, goto recovery*/
+#define CRITICAL_CRASH_WINDOW       (15*60)  /* ... in 15 minutes, goto recovery*/
 
 static int wait_for_one_process(int block)
 {
