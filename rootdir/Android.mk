@@ -45,6 +45,11 @@ ifeq ($(TARGET_PRODUCT),iMX53)
 	# boot partition...
 	sed -i -e 's,mmcblk0p5,mmcblk0p6,g;s,mmcblk0p3,mmcblk0p5,g;s,mmcblk0p2,mmcblk0p3,g' $(TARGET_ROOT_OUT)/init.rc
 endif
+ifeq ($(TARGET_PRODUCT),origen)
+	# Partitions are offset a bit by Origen's special
+	# boot partition...
+	sed -i -e 's,mmcblk0p5,mmcblk0p6,g;s,mmcblk0p3,mmcblk0p5,g;s,mmcblk0p2,mmcblk0p3,g' $(TARGET_ROOT_OUT)/init.rc
+endif
 ALL_PREBUILT += $(file)
 $(INSTALLED_RAMDISK_TARGET): $(file)
 endif
