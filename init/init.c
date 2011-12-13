@@ -551,8 +551,7 @@ static int console_init_action(int nargs, char **args)
     close(fd);
 
     if( load_565rle_image(INIT_IMAGE_FILE) ) {
-	//TODO FIX THE BLINKING TEXT
- /*       fd = open("/dev/tty0", O_WRONLY);
+        fd = open("/dev/tty0", O_WRONLY);
         if (fd >= 0) {
             const char *msg;
                 msg = "\n"
@@ -573,7 +572,6 @@ static int console_init_action(int nargs, char **args)
             write(fd, msg, strlen(msg));
             close(fd);
         }
-	*/
     }
     return 0;
 }
