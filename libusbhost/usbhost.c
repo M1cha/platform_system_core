@@ -63,10 +63,7 @@ struct usb_host_context {
 
 struct usb_device {
     char dev_name[64];
-    union {
     unsigned char desc[4096];
-    struct usb_device_descriptor desc_s;
-    };
     int desc_length;
     int fd;
     int writeable;
@@ -142,10 +139,7 @@ void usb_host_run(struct usb_host_context *context,
                   void *client_data)
 {
     struct inotify_event* event;
-    union {
-        char event_buf[512];
-        struct inotify_event evbuf;
-    } eventbuf;
+    char event_buf[512];
     char path[100];
     int i, ret, done = 0;
     int wd, wds[10];
@@ -178,9 +172,9 @@ void usb_host_run(struct usb_host_context *context,
         done |= discovery_done_cb(client_data);
 
     while (!done) {
-        ret = read(context->fd, eventbuf.event_buf, sizeof(eventbuf.event_buf));
+        ret = read(context->fd, event_buf, sizeof(event_buf));
         if (ret >= (int)sizeof(struct inotify_event)) {
-            event = &eventbuf.evbuf;
+            event = (struct inotify_event *)event_buf;
             wd = event->wd;
             if (wd == wds[0]) {
                 i = atoi(event->name);
@@ -326,19 +320,19 @@ char* usb_device_get_name_from_unique_id(int id)
 
 uint16_t usb_device_get_vendor_id(struct usb_device *device)
 {
-    struct usb_device_descriptor* desc = &device->desc_s;
+    struct usb_device_descriptor* desc = (struct usb_device_descriptor*)device->desc;
     return __le16_to_cpu(desc->idVendor);
 }
 
 uint16_t usb_device_get_product_id(struct usb_device *device)
 {
-    struct usb_device_descriptor* desc = &device->desc_s;
+    struct usb_device_descriptor* desc = (struct usb_device_descriptor*)device->desc;
     return __le16_to_cpu(desc->idProduct);
 }
 
 const struct usb_device_descriptor* usb_device_get_device_descriptor(struct usb_device *device)
 {
-    return &device->desc_s;
+    return (struct usb_device_descriptor*)device->desc;
 }
 
 char* usb_device_get_string(struct usb_device *device, int id)
@@ -381,7 +375,7 @@ char* usb_device_get_string(struct usb_device *device, int id)
 
 char* usb_device_get_manufacturer_name(struct usb_device *device)
 {
-    struct usb_device_descriptor *desc = &device->desc_s;
+    struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
 
     if (desc->iManufacturer)
         return usb_device_get_string(device, desc->iManufacturer);
@@ -391,7 +385,7 @@ char* usb_device_get_manufacturer_name(struct usb_device *device)
 
 char* usb_device_get_product_name(struct usb_device *device)
 {
-    struct usb_device_descriptor *desc = &device->desc_s;
+    struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
 
     if (desc->iProduct)
         return usb_device_get_string(device, desc->iProduct);
@@ -401,7 +395,7 @@ char* usb_device_get_product_name(struct usb_device *device)
 
 char* usb_device_get_serial(struct usb_device *device)
 {
-    struct usb_device_descriptor *desc = &device->desc_s;
+    struct usb_device_descriptor *desc = (struct usb_device_descriptor *)device->desc;
 
     if (desc->iSerialNumber)
         return usb_device_get_string(device, desc->iSerialNumber);
