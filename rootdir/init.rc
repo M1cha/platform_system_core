@@ -42,7 +42,7 @@ loglevel 3
 # Backwards Compat (no longer there in stock ICS)
     symlink /mnt/sdcard /sdcard
 
-    mkdir /system
+    mkdir /system 0755 system cache
     mkdir /data 0771 system system
     mkdir /cache 0770 system cache
     mkdir /config 0500 root root
@@ -101,6 +101,7 @@ on fs
 # mount mmc partitions
 # mmcblk0p1: /boot
     mount ext4 /dev/block/mmcblk0p2 /system wait ro
+    chmod 0755 /system
     mount ext4 /dev/block/mmcblk0p3 /cache wait
 # mmcblk0p4: extended partition container
     mount ext4 /dev/block/mmcblk0p5 /data wait
