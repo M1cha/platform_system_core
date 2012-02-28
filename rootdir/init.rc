@@ -162,6 +162,7 @@ on post-fs-data
     mkdir /data/misc 01771 system misc
     mkdir /data/misc/bluetoothd 0770 bluetooth bluetooth
     mkdir /data/misc/bluetooth 0770 system system
+    mkdir /data/misc/gatord 0700 root root
     mkdir /data/misc/keystore 0700 keystore keystore
     mkdir /data/misc/keychain 0771 system system
     mkdir /data/misc/vpn 0770 system vpn
@@ -601,6 +602,6 @@ service dumpstate /system/bin/dumpstate -s
     oneshot
 
 # userspace daemon needed for gator
-service gatord /system/bin/gatord
+service gatord /system/bin/gatord -c /data/misc/gatord/configuration.xml
     class main
     user root
