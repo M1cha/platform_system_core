@@ -40,6 +40,7 @@ ifneq ($(TARGET_PROVIDES_INIT_RC),true)
 file := $(TARGET_ROOT_OUT)/init.rc
 $(file) : $(LOCAL_PATH)/init.rc | $(ACP)
 	$(transform-prebuilt-to-target)
+	sed -i -e '/^###/d' $(TARGET_ROOT_OUT)/init.rc
 ifeq ($(TARGET_PRODUCT),iMX53)
 	# Partitions are offset a bit by iMX53's special
 	# boot partition...
