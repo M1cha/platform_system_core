@@ -1,8 +1,5 @@
-### Note: This file is modified at installation time
-### to set the correct partitions for each board.
-### The modification is done with sed, invoked from
-### Android.mk
-###
+import init.partitions.rc
+
 on early-init
     # Set init and its forked children's oom_adj.
     write /proc/1/oom_adj -16
@@ -101,18 +98,6 @@ loglevel 3
 # Allow everybody to read the xt_qtaguid resource tracking misc dev.
 # This is needed by any process that uses socket tagging.
     chmod 0644 /dev/xt_qtaguid
-
-on fs
-# mount mmc partitions
-### Correct device names are injected with sed
-### in Android.mk
-# mmcblk0p1: /boot
-    mount ext4 /dev/block/mmcblk0p2 /system wait ro
-    chmod 0755 /system
-    mount ext4 /dev/block/mmcblk0p3 /cache wait
-# mmcblk0p4: extended partition container
-    mount ext4 /dev/block/mmcblk0p5 /data wait
-# mmcblk0p6: /sdcard
 
 on post-fs
     # once everything is setup, no need to modify /
