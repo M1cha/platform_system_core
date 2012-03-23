@@ -85,7 +85,9 @@ struct {
     { "persist.sys.",     AID_SYSTEM,   0 },
     { "persist.service.", AID_SYSTEM,   0 },
     { "persist.security.", AID_SYSTEM,   0 },
+#ifdef SAMSUNG_HDMI_SUPPORT
     { "dev.",             AID_MEDIA,    0 },
+#endif
     { NULL, 0, 0 }
 };
 
