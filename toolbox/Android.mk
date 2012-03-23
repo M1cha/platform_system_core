@@ -55,8 +55,7 @@ TOOLS := \
 	nandread \
 	ionice \
 	touch \
-	lsof \
-	refreshSurfaceFlinger
+	lsof
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
