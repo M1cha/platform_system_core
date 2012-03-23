@@ -55,8 +55,11 @@ TOOLS := \
 	nandread \
 	ionice \
 	touch \
-	lsof \
-	refreshSurfaceFlinger
+	lsof
+
+ifeq ($(BOARD_HAVE_HDMI_SUPPORT),SAMSUNG_HDMI_SUPPORT)
+TOOLS += refreshSurfaceFlinger
+endif
 
 ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
 TOOLS += r
