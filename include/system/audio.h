@@ -72,9 +72,7 @@ typedef enum {
     AUDIO_SOURCE_CAMCORDER           = 5,
     AUDIO_SOURCE_VOICE_RECOGNITION   = 6,
     AUDIO_SOURCE_VOICE_COMMUNICATION = 7,
-#ifdef STERICSSON_FMRADIO_SUPPORT
     AUDIO_SOURCE_FM_RADIO_RX         = 8,
-#endif
     AUDIO_SOURCE_CNT,
     AUDIO_SOURCE_MAX                 = AUDIO_SOURCE_CNT - 1,
 } audio_source_t;
@@ -299,9 +297,7 @@ typedef enum {
     AUDIO_DEVICE_OUT_AUX_DIGITAL               = 0x400,
     AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET         = 0x800,
     AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET         = 0x1000,
-#ifdef STERICSSON_FMRADIO_SUPPORT
     AUDIO_DEVICE_OUT_FM_TX                     = 0x2000,
-#endif
     AUDIO_DEVICE_OUT_DEFAULT                   = 0x8000,
     AUDIO_DEVICE_OUT_ALL      = (AUDIO_DEVICE_OUT_EARPIECE |
                                  AUDIO_DEVICE_OUT_SPEAKER |
@@ -314,9 +310,7 @@ typedef enum {
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_HEADPHONES |
                                  AUDIO_DEVICE_OUT_BLUETOOTH_A2DP_SPEAKER |
                                  AUDIO_DEVICE_OUT_AUX_DIGITAL |
-#ifdef STERICSSON_FMRADIO_SUPPORT
                                  AUDIO_DEVICE_OUT_FM_TX |
-#endif
                                  AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
                                  AUDIO_DEVICE_OUT_DEFAULT),
@@ -336,9 +330,7 @@ typedef enum {
     AUDIO_DEVICE_IN_AUX_DIGITAL           = 0x200000,
     AUDIO_DEVICE_IN_VOICE_CALL            = 0x400000,
     AUDIO_DEVICE_IN_BACK_MIC              = 0x800000,
-#ifdef STERICSSON_FMRADIO_SUPPORT
     AUDIO_DEVICE_IN_FM_RX                 = 0x1000000,
-#endif
     AUDIO_DEVICE_IN_DEFAULT               = 0x80000000,
 
     AUDIO_DEVICE_IN_ALL     = (AUDIO_DEVICE_IN_COMMUNICATION |
@@ -349,9 +341,7 @@ typedef enum {
                                AUDIO_DEVICE_IN_AUX_DIGITAL |
                                AUDIO_DEVICE_IN_VOICE_CALL |
                                AUDIO_DEVICE_IN_BACK_MIC |
-#ifdef STERICSSON_FMRADIO_SUPPORT
                                AUDIO_DEVICE_IN_FM_RX |
-#endif
                                AUDIO_DEVICE_IN_DEFAULT),
     AUDIO_DEVICE_IN_ALL_SCO = AUDIO_DEVICE_IN_BLUETOOTH_SCO_HEADSET,
 } audio_devices_t;
