@@ -87,6 +87,8 @@ enum {
     HAL_PIXEL_FORMAT_YV12   = 0x32315659, // YCrCb 4:2:0 Planar
 
 
+    /* STE: Added Support of YUV42XMBN, required for Copybit CC acceleration */
+    HAL_PIXEL_FORMAT_YCBCR42XMBN = 0xE,
 
     /* Legacy formats (deprecated), used by ImageFormat.java */
     HAL_PIXEL_FORMAT_YCbCr_422_SP       = 0x10, // NV16
