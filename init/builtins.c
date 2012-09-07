@@ -23,6 +23,7 @@
 #include <linux/kd.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <linux/if.h>
 #include <arpa/inet.h>
@@ -31,12 +32,6 @@
 #include <sys/resource.h>
 #include <linux/loop.h>
 #include <cutils/partition_utils.h>
-#include <sys/system_properties.h>
-
-#ifdef HAVE_SELINUX
-#include <selinux/selinux.h>
-#include <selinux/label.h>
-#endif
 
 #include "init.h"
 #include "keywords.h"
@@ -75,61 +70,47 @@ static int write_file(const char *path, const char *value)
     }
 }
 
-static int _open(const char *path)
-{
-    int fd;
-
-    fd = open(path, O_RDONLY | O_NOFOLLOW);
-    if (fd < 0)
-        fd = open(path, O_WRONLY | O_NOFOLLOW);
-
-    return fd;
-}
 
 static int _chown(const char *path, unsigned int uid, unsigned int gid)
 {
-    int fd;
     int ret;
 
-    fd = _open(path);
-    if (fd < 0) {
-        return -1;
-    }
+    struct stat p_statbuf;
 
-    ret = fchown(fd, uid, gid);
+    ret = lstat(path, &p_statbuf);
     if (ret < 0) {
-        int errno_copy = errno;
-        close(fd);
-        errno = errno_copy;
         return -1;
     }
 
-    close(fd);
+    if (S_ISLNK(p_statbuf.st_mode) == 1) {
+        errno = EINVAL;
+        return -1;
+    }
 
-    return 0;
+    ret = chown(path, uid, gid);
+
+    return ret;
 }
 
 static int _chmod(const char *path, mode_t mode)
 {
-    int fd;
     int ret;
 
-    fd = _open(path);
-    if (fd < 0) {
-        return -1;
-    }
+    struct stat p_statbuf;
 
-    ret = fchmod(fd, mode);
+    ret = lstat(path, &p_statbuf);
     if (ret < 0) {
-        int errno_copy = errno;
-        close(fd);
-        errno = errno_copy;
         return -1;
     }
 
-    close(fd);
+    if (S_ISLNK(p_statbuf.st_mode) == 1) {
+        errno = EINVAL;
+        return -1;
+    }
 
-    return 0;
+    ret = chmod(path, mode);
+
+    return ret;
 }
 
 static int insmod(const char *filename, char *options)
@@ -237,9 +218,42 @@ int do_domainname(int nargs, char **args)
     return write_file("/proc/sys/kernel/domainname", args[1]);
 }
 
+/*exec <path> <arg1> <arg2> ... */
+#define MAX_PARAMETERS 64
 int do_exec(int nargs, char **args)
 {
-    return -1;
+    pid_t pid;
+    int status, i, j;
+    char *par[MAX_PARAMETERS];
+    if (nargs > MAX_PARAMETERS)
+    {
+        return -1;
+    }
+    for(i=0, j=1; i<(nargs-1) ;i++,j++)
+    {
+        par[i] = args[j];
+    }
+    par[i] = (char*)0;
+    pid = fork();
+    if (!pid)
+    {
+        char tmp[32];
+        int fd, sz;
+        get_property_workspace(&fd, &sz);
+        sprintf(tmp, "%d,%d", dup(fd), sz);
+        setenv("ANDROID_PROPERTY_WORKSPACE", tmp, 1);
+        execve(par[0],par,environ);
+        exit(0);
+    }
+    else
+    {
+        while (waitpid(pid, &status, 0) == -1 && errno == EINTR);
+        if (WEXITSTATUS(status) != 0) {
+            ERROR("exec: pid %1d exited with return code %d: %s", (int)pid, WEXITSTATUS(status), strerror(status));
+        }
+
+    }
+    return 0;
 }
 
 int do_export(int nargs, char **args)
@@ -287,6 +301,32 @@ int do_insmod(int nargs, char **args)
     }
 
     return do_insmod_inner(nargs, args, size);
+}
+
+int do_log(int nargs, char **args)
+{
+    char* par[nargs+3];
+    char* value;
+    int i;
+
+    par[0] = "exec";
+    par[1] = "/system/bin/log";
+    par[2] = "-tinit";
+    for (i = 1; i < nargs; ++i) {
+        value = args[i];
+        if (value[0] == '$') {
+            /* system property if value starts with '$' */
+            value++;
+            if (value[0] != '$') {
+                value = (char*) property_get(value);
+                if (!value) value = args[i];
+            }
+        }
+        par[i+2] = value;
+    }
+    par[nargs+2] = NULL;
+
+    return do_exec(nargs+2, par);
 }
 
 int do_mkdir(int nargs, char **args)
@@ -499,28 +539,6 @@ exit_success:
 
 }
 
-int do_setcon(int nargs, char **args) {
-#ifdef HAVE_SELINUX
-    if (is_selinux_enabled() <= 0)
-        return 0;
-    if (setcon(args[1]) < 0) {
-        return -errno;
-    }
-#endif
-    return 0;
-}
-
-int do_setenforce(int nargs, char **args) {
-#ifdef HAVE_SELINUX
-    if (is_selinux_enabled() <= 0)
-        return 0;
-    if (security_setenforce(atoi(args[1])) < 0) {
-        return -errno;
-    }
-#endif
-    return 0;
-}
-
 int do_setkey(int nargs, char **args)
 {
     struct kbentry kbe;
@@ -534,15 +552,22 @@ int do_setprop(int nargs, char **args)
 {
     const char *name = args[1];
     const char *value = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
 
-    ret = expand_props(prop_val, value, sizeof(prop_val));
-    if (ret) {
-        ERROR("cannot expand '%s' while assigning to '%s'\n", value, name);
-        return -EINVAL;
+    if (value[0] == '$') {
+        /* Use the value of a system property if value starts with '$' */
+        value++;
+        if (value[0] != '$') {
+            value = property_get(value);
+            if (!value) {
+                ERROR("property %s has no value for assigning to %s\n", value, name);
+                return -EINVAL;
+            }
+        } /* else fall through to support double '$' prefix for setting properties
+           * to string literals that start with '$'
+           */
     }
-    property_set(name, prop_val);
+
+    property_set(name, value);
     return 0;
 }
 
@@ -581,8 +606,7 @@ int do_restart(int nargs, char **args)
     struct service *svc;
     svc = service_find_by_name(args[1]);
     if (svc) {
-        service_stop(svc);
-        service_start(svc, NULL);
+        service_restart(svc);
     }
     return 0;
 }
@@ -626,15 +650,21 @@ int do_write(int nargs, char **args)
 {
     const char *path = args[1];
     const char *value = args[2];
-    char prop_val[PROP_VALUE_MAX];
-    int ret;
-
-    ret = expand_props(prop_val, value, sizeof(prop_val));
-    if (ret) {
-        ERROR("cannot expand '%s' while writing to '%s'\n", value, path);
-        return -EINVAL;
+    if (value[0] == '$') {
+        /* Write the value of a system property if value starts with '$' */
+        value++;
+        if (value[0] != '$') {
+            value = property_get(value);
+            if (!value) {
+                ERROR("property %s has no value for writing to %s\n", value, path);
+                return -EINVAL;
+            }
+        } /* else fall through to support double '$' prefix for writing
+           * string literals that start with '$'
+           */
     }
-    return write_file(path, prop_val);
+
+    return write_file(path, value);
 }
 
 int do_copy(int nargs, char **args)
@@ -731,64 +761,6 @@ int do_chmod(int nargs, char **args) {
     if (_chmod(args[2], mode) < 0) {
         return -errno;
     }
-    return 0;
-}
-
-int do_restorecon(int nargs, char **args) {
-#ifdef HAVE_SELINUX
-    char *secontext = NULL;
-    struct stat sb;
-    int i;
-
-    if (is_selinux_enabled() <= 0 || !sehandle)
-        return 0;
-
-    for (i = 1; i < nargs; i++) {
-        if (lstat(args[i], &sb) < 0)
-            return -errno;
-        if (selabel_lookup(sehandle, &secontext, args[i], sb.st_mode) < 0)
-            return -errno;
-        if (lsetfilecon(args[i], secontext) < 0) {
-            freecon(secontext);
-            return -errno;
-        }
-        freecon(secontext);
-    }
-#endif
-    return 0;
-}
-
-int do_setsebool(int nargs, char **args) {
-#ifdef HAVE_SELINUX
-    SELboolean *b = alloca(nargs * sizeof(SELboolean));
-    char *v;
-    int i;
-
-    if (is_selinux_enabled() <= 0)
-        return 0;
-
-    for (i = 1; i < nargs; i++) {
-        char *name = args[i];
-        v = strchr(name, '=');
-        if (!v) {
-            ERROR("setsebool: argument %s had no =\n", name);
-            return -EINVAL;
-        }
-        *v++ = 0;
-        b[i-1].name = name;
-        if (!strcmp(v, "1") || !strcasecmp(v, "true") || !strcasecmp(v, "on"))
-            b[i-1].value = 1;
-        else if (!strcmp(v, "0") || !strcasecmp(v, "false") || !strcasecmp(v, "off"))
-            b[i-1].value = 0;
-        else {
-            ERROR("setsebool: invalid value %s\n", v);
-            return -EINVAL;
-        }
-    }
-
-    if (security_set_boolean_list(nargs - 1, b, 0) < 0)
-        return -errno;
-#endif
     return 0;
 }
 
