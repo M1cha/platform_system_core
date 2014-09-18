@@ -67,6 +67,11 @@ static int check_response(usb_handle *usb, unsigned int size, char *response)
             return -1;
         }
 
+        if(!memcmp(status, "PRNT", 4)) {
+            fwrite(status+4, 1, r-4, stdout);
+            continue;
+        }
+
         if(!memcmp(status, "INFO", 4)) {
             fprintf(stderr,"(bootloader) %s\n", status + 4);
             continue;
